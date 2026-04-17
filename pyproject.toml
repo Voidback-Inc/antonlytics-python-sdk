@@ -1,0 +1,67 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "antonlytics"
+version = "1.0.0"
+description = "Official Python SDK for the Antonlytics Knowledge Graph API"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Antonlytics", email = "sdk@antonlytics.com" }]
+keywords = ["antonlytics", "knowledge-graph", "ontology", "sdk", "triplet"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+requires-python = ">=3.9"
+dependencies = [
+    "httpx>=0.25.0",
+]
+
+[project.optional-dependencies]
+async = ["httpx>=0.25.0"]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-httpx>=0.28.0",
+    "mypy>=1.8.0",
+    "ruff>=0.3.0",
+    "hatchling>=1.21.0",
+]
+
+[project.scripts]
+anto = "antonlytics.cli:main"
+
+[project.urls]
+Homepage = "https://antonlytics.com"
+Documentation = "https://docs.antonlytics.com/sdk/python"
+Repository = "https://github.com/antonlytics/sdk-python"
+Issues = "https://github.com/antonlytics/sdk-python/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["antonlytics"]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "N", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.9"
+strict = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
