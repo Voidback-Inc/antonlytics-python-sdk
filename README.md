@@ -1,336 +1,265 @@
-# antonlytics
+# Antonlytics Python SDK
 
-Official Python SDK for the [Antonlytics](https://antonlytics.com) Knowledge Graph API.
+Memory for AI Agents - Simple natural language SDK.
 
-[![PyPI](https://img.shields.io/pypi/v/antonlytics)](https://pypi.org/project/antonlytics/)
-[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue)](https://python.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![PyPI version](https://badge.fury.io/py/antonlytics.svg)](https://badge.fury.io/py/antonlytics)
+[![Python Versions](https://img.shields.io/pypi/pyversions/antonlytics.svg)](https://pypi.org/project/antonlytics/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
----
-
-## Install
+## Installation
 
 ```bash
 pip install antonlytics
 ```
 
----
-
 ## Quick Start
 
 ```python
-from antonlytics import Antonlytics, Triplet, EntityRef
+from antonlytics import Agent
 
-anto = Antonlytics(api_key="anto_live_xxx")
-
-# Ingest a relationship
-anto.ingest.track(
-    project_id="proj_abc",
-    triplets=Triplet(
-        subject=EntityRef("Customer", id="c1", properties={"name": "Alice", "country": "USA"}),
-        predicate="PURCHASED",
-        object=EntityRef("Product", id="p1", properties={"title": "Laptop Pro", "price": 999}),
-    ),
+# Initialize agent
+agent = Agent(
+    api_key="your-api-key",
+    project_id="your-project-id"
 )
 
-# Query the graph
-result = (
-    anto.query.build("proj_abc")
-    .select("Customer", alias="c1")
-        .properties("name", "email", "country")
-        .eq("country", "USA")
-        .gte("age", 18)
-    .done()
-    .order_by("age", direction="desc")
-    .limit(50)
-    .run()
-)
-for row in result:
-    print(row["name"], row["country"])
+# Ingest - agent learns from natural language
+agent.ingest("""
+Had a call with Sarah Johnson from TechCorp today.
+She's interested in our Enterprise plan for 50 users.
+Follow up next Tuesday.
+""")
+
+# Chat - agent remembers and responds
+response = agent.chat("Who should I follow up with?")
+print(response["response"])
+# => "You should follow up with Sarah Johnson from TechCorp..."
 ```
 
----
+## Features
 
-## Configuration
+- **Natural Language Ingestion** - No complex entity creation, just plain English
+- **AI-Powered Chat** - Chat with your agent using our model + your memory
+- **Memory Access** - Get structured memory for your own AI model
+- **System Prompts** - Configure agent behavior and personality
+- **Simple API** - 3 lines of code to get started
+
+## Two Usage Options
+
+### Option 1: Use Our Model
+
+Full-service AI with your system prompt + memory:
 
 ```python
-anto = Antonlytics(
-    api_key="anto_live_...",           # required — from app.antonlytics.com → API Keys
-    base_url="https://api.antonlytics.com",  # optional, default shown
-    timeout=30.0,                      # seconds, default 30
-    max_retries=2,                     # auto-retry 5xx / network errors
-    debug=False,                       # print HTTP calls to stdout
-)
+# We handle everything
+response = agent.chat("Who should I follow up with?")
+print(response["response"])
 ```
 
-Use as a **context manager** to ensure the connection pool is closed:
+### Option 2: Use Your Model
+
+Just get memory context for your own model:
 
 ```python
-with Antonlytics(api_key="anto_live_xxx") as anto:
-    projects = anto.projects.list()
-```
+# Get memory
+memory = agent.get_memory()
 
----
+# Use with your model (OpenAI, Anthropic, etc.)
+from openai import OpenAI
+client = OpenAI()
 
-## Ingestion
-
-All data enters the knowledge graph as **triplets**: `subject –[predicate]→ object`.
-
-### `anto.ingest.track()` ← recommended
-
-Ingest and automatically poll if async. Transparent for both sync and async batches.
-
-```python
-result = anto.ingest.track(
-    "proj_abc",
-    triplets=[
-        Triplet(
-            subject=EntityRef("Customer", id="c1", properties={"name": "Alice"}),
-            predicate="PURCHASED",
-            object=EntityRef("Product", id="p1", properties={"title": "Laptop"}),
-            relationship_properties={"quantity": 2},
-        ),
-    ],
-    interval=1.0,    # poll every 1s for async batches
-    timeout=60.0,    # give up after 60s
-    on_status=lambda event: print(f"Status: {event.status}"),
+response = client.chat.completions.create(
+    model="gpt-4",
+    messages=[
+        {"role": "system", "content": "You are a sales assistant"},
+        {"role": "system", "content": f"Memory: {memory}"},
+        {"role": "user", "content": "Who to follow up?"}
+    ]
 )
 ```
 
-Batches **≤ 100** → processed synchronously, full results returned immediately.
-Batches **> 100** → queued, auto-polled until done.
+## Documentation
 
-### `anto.ingest.batch()` — large datasets
+### Agent Class
 
+#### `__init__(api_key, project_id, base_url=None)`
+
+Initialize the agent.
+
+**Parameters:**
+- `api_key` (str): Your Antonlytics API key
+- `project_id` (str): Your project/agent ID
+- `base_url` (str, optional): API base URL
+
+#### `ingest(text: str) -> dict`
+
+Ingest natural language text and extract entities/relationships.
+
+**Parameters:**
+- `text` (str): Natural language text (conversations, notes, emails)
+
+**Returns:**
+- dict with extracted entities and relationships
+
+**Example:**
 ```python
-anto.ingest.batch(
-    "proj_abc",
-    all_my_triplets,          # any size
-    chunk_size=200,           # triplets per request
-    on_chunk=lambda i, n, r: print(f"Chunk {i}/{n}"),
-)
+result = agent.ingest("Customer Alice bought Laptop Pro for $999")
+print(result["created"])  # {"entities": 2, "relationships": 1}
 ```
 
-### `anto.ingest.poll()` — manual async polling
+#### `chat(message: str, history: list = None) -> dict`
 
+Chat with your agent. Uses system prompt + full memory context.
+
+**Parameters:**
+- `message` (str): Your question or message
+- `history` (list, optional): Conversation history
+
+**Returns:**
+- dict with response and relevant entities
+
+**Example:**
 ```python
-result = anto.ingest.send("proj_abc", triplets)
-if result.is_async:
-    event = anto.ingest.poll(
-        result.event_id,
-        timeout=120.0,
-        on_status=lambda e: print(e.status),
-    )
+response = agent.chat("Who bought laptops?")
+print(response["response"])
+print(response["relevant_entities"])
 ```
 
----
+#### `get_memory(query: str = None) -> dict`
 
-## Query Builder
+Get structured memory for your own AI model.
 
+**Parameters:**
+- `query` (str, optional): Natural language query to filter memory
+
+**Returns:**
+- dict with entities and relationships
+
+**Example:**
 ```python
-result = (
-    anto.query.build("proj_abc")
-
-    # First entity node
-    .select("Customer", alias="c1")
-        .properties("name", "email", "country", "age")
-        .eq("country", "USA")
-        .gte("age", 21)
-        .relates_to("PURCHASED", "p1")   # join to product node below
-    .done()
-
-    # Second entity node (joined via PURCHASED)
-    .select("Product", alias="p1")
-        .properties("title", "price", "category")
-        .lte("price", 500)
-    .done()
-
-    .order_by("age", direction="desc")
-    .limit(100)
-    .name("US adults buying affordable products")
-    .run()
-)
-
-print(f"{result.total} rows in {result.execution_ms}ms")
-for row in result:
-    print(row)
+memory = agent.get_memory("laptop purchases")
+# Use with your own model
 ```
 
-**Filter operators:** `eq` · `neq` · `contains` · `starts_with` · `ends_with` · `gt` · `gte` · `lt` · `lte`
+#### `set_system_prompt(prompt: str) -> dict`
 
-### Raw query payload
+Configure agent behavior and personality.
 
+**Parameters:**
+- `prompt` (str): System prompt text
+
+**Example:**
 ```python
-result = anto.query.execute("proj_abc", {
-    "entities": [{"alias": "c1", "type": "Customer",
-                  "filters": [{"property": "country", "operator": "eq", "value": "USA"}]}],
-    "limit": 10,
-})
+agent.set_system_prompt("""
+You are a helpful sales assistant.
+Be concise and action-oriented.
+Focus on follow-ups and next steps.
+""")
 ```
 
-### Ontology tree
+#### `get_system_prompt() -> str`
 
-```python
-tree = anto.query.ontology("proj_abc")
-# { "Customer": EntityTypeDef(properties=[...], relationships=[...]), ... }
-for name, defn in tree.items():
-    print(name, [p.name for p in defn.properties])
-```
+Get current system prompt.
 
----
-
-## Dashboard
-
-```python
-m = anto.dashboard.metrics("proj_abc")
-
-print(m.summary.events_tracked)
-print(m.summary.active_entities)
-print(m.summary.total_relationships)
-
-# Chart data — ready to pass to matplotlib, plotly, recharts, etc.
-print(m.event_volume.data)          # [{"date": "2026-04-01", "count": 42}, ...]
-print(m.entity_distribution.data)   # [{"name": "Customer", "value": 1200}, ...]
-print(m.relationship_growth.data)   # [{"date": "...", "new": 40, "cumulative": 400}, ...]
-print(m.top_ontology_queries)       # [{"name": "US customers", "count": 18}, ...]
-```
-
----
-
-## Projects
-
-```python
-projects = anto.projects.list()
-project  = anto.projects.get("proj_abc")
-created  = anto.projects.create(name="My Graph", team_id="team-uuid")
-stats    = anto.projects.stats("proj_abc")
-```
-
----
-
-## Async Client
-
-```python
-import asyncio
-from antonlytics import AsyncAntonlytics, Triplet, EntityRef
-
-async def main():
-    async with AsyncAntonlytics(api_key="anto_live_xxx") as anto:
-        # Parallel API calls
-        ontology, metrics, projects = await asyncio.gather(
-            anto.query.ontology("proj_abc"),
-            anto.dashboard.metrics("proj_abc"),
-            anto.projects.list(),
-        )
-
-        # Fluent query
-        result = await (
-            anto.query.build("proj_abc")
-            .select("Customer").eq("country", "USA").done()
-            .limit(20)
-            .run()
-        )
-        for row in result:
-            print(row)
-
-asyncio.run(main())
-```
-
----
+**Returns:**
+- str: System prompt text
 
 ## Error Handling
 
 ```python
-from antonlytics import (
-    AntoError, AuthenticationError, PlanLimitError,
-    NotFoundError, RateLimitError, NetworkError, TimeoutError,
-)
+from antonlytics import Agent, AntonlyticsError, APIError, AuthenticationError
 
 try:
-    anto.ingest.track(...)
-except PlanLimitError as e:
-    print(f"Plan limit hit: {e.message}")
-    # Redirect user to app.antonlytics.com/billing
-except AuthenticationError:
-    print("API key is invalid or revoked")
-except AntoError as e:
-    print(f"[{e.code}] HTTP {e.status}: {e.message}")
-    print(e.details)
+    agent = Agent(api_key="invalid", project_id="test")
+    agent.chat("Hello")
+except AuthenticationError as e:
+    print(f"Auth error: {e}")
+except APIError as e:
+    print(f"API error: {e.status_code} - {e}")
+except AntonlyticsError as e:
+    print(f"Error: {e}")
 ```
 
-| Exception | HTTP | When |
-|---|---|---|
-| `AuthenticationError` | 401 | Invalid API key |
-| `PermissionError` | 403 | Key lacks permission |
-| `NotFoundError` | 404 | Project/resource not found |
-| `PlanLimitError` | 402 | Event or key quota exhausted |
-| `ValidationError` | 400/422 | Bad request payload |
-| `RateLimitError` | 429 | Too many requests |
-| `ServerError` | 5xx | Backend error |
-| `NetworkError` | — | DNS / connection failure |
-| `TimeoutError` | — | Request exceeded timeout |
-| `IngestionFailedError` | — | Async job failed |
-| `PollTimeoutError` | — | Async job didn't finish in time |
-| `InvalidConfigError` | — | Bad client configuration |
-
----
-
-## CLI
-
-```bash
-# Set your API key
-export ANTO_API_KEY=anto_live_xxx
-
-anto projects
-anto stats      <project-id>
-anto ontology   <project-id>
-anto ingest     <project-id> ./triplets.json
-anto query      <project-id> ./query.json
-anto dashboard  <project-id>
-anto poll       <event-id>
-
-# Environment
-ANTO_BASE_URL=http://localhost:8000   # self-hosted
-ANTO_DEBUG=1                          # log HTTP calls
-```
-
----
-
-## Django / Flask Integration
+## Complete Example
 
 ```python
-# settings.py (Django) or app.py (Flask)
-from antonlytics import Antonlytics
+from antonlytics import Agent
 
-anto = Antonlytics(
-    api_key=os.environ["ANTONLYTICS_API_KEY"],
-    base_url=os.environ.get("ANTONLYTICS_BASE_URL", "https://api.antonlytics.com"),
+# Initialize
+agent = Agent(
+    api_key="your-api-key",
+    project_id="your-project-id"
 )
+
+# Set behavior
+agent.set_system_prompt("""
+You are a sales assistant.
+Focus on follow-ups and next steps.
+""")
+
+# Ingest multiple conversations
+agent.ingest("""
+Call with Mike Rodriguez from StartupXYZ.
+He's the founder. Looking at our API for their mobile app.
+Has 100K users. Wants custom pricing.
+Send proposal by Friday.
+""")
+
+agent.ingest("""
+Email from Sarah Chen at BigCorp.
+VP of Engineering. Interested in Enterprise.
+Team of 200 developers. Budget discussion next week.
+""")
+
+# Query memory
+response = agent.chat("What are my top priorities this week?")
+print(response["response"])
+
+# Get all contacts
+response = agent.chat("List all people I've talked to")
+for entity in response["relevant_entities"]:
+    if entity["type"] == "Person":
+        print(f"- {entity['name']}")
 ```
 
----
+## Requirements
+
+- Python >= 3.8
+- requests >= 2.28.0
 
 ## Development
 
 ```bash
+# Clone repository
+git clone https://github.com/Voidback-Inc/antonlytics-python-sdk
+cd antonlytics-python-sdk
+
+# Install dependencies
 pip install -e ".[dev]"
+
+# Run tests
 pytest
+
+# Format code
+black .
+
+# Type check
 mypy antonlytics
-ruff check antonlytics
 ```
 
----
+## Links
 
-## Publishing to PyPI
-
-```bash
-pip install build twine
-python -m build
-twine upload dist/*
-```
-
----
+- [Documentation](https://antonlytics.com/docs/python-sdk)
+- [API Reference](https://antonlytics.com/docs/api)
+- [GitHub](https://github.com/Voidback-Inc/antonlytics-python-sdk)
+- [Website](https://antonlytics.com)
 
 ## License
 
-MIT © Antonlytics
+MIT License - see [LICENSE](LICENSE) file for details.
+
+## Support
+
+- Email: support@antonlytics.com
+- Documentation: https://antonlytics.com/docs
+- Issues: https://github.com/Voidback-Inc/antonlytics-python-sdk/issues
