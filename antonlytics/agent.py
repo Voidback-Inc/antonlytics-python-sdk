@@ -2,7 +2,7 @@
 Agent class for interacting with Antonlytics API.
 """
 
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Iterator
 from .http_client import HTTPClient
 from .exceptions import AntonlyticsError
 
@@ -121,41 +121,89 @@ class Agent:
             
         return self.client.post('/api/v1/memory/chat/', payload)
     
-    def get_memory(self, query: Optional[str] = None) -> Dict[str, Any]:
+    def get_memory(
+        self,
+        query: Optional[str] = None,
+        *,
+        max_entities: int = 10_000,
+        page_size: int = 500,
+    ) -> Dict[str, Any]:
         """
         Get memory context for your own agent/model.
-        Returns structured knowledge graph data.
-        
+
+        Two modes:
+          - ``query`` provided: semantic top-K retrieval (single shot, server-ranked).
+            Returns the most relevant entities and their relationships.
+          - ``query=None``: enumerates the full project graph via cursor pagination,
+            auto-iterating pages internally. Stops at ``max_entities`` for safety.
+
         Args:
-            query: Optional natural language query to filter context
-            
+            query: Optional natural language query for ranked retrieval.
+            max_entities: Safety ceiling for full-graph mode (default 10000).
+            page_size: Pagination page size for full-graph mode (1-1000, default 500).
+
         Returns:
-            Dict with entities and relationships
-            
+            Dict with entities and relationships.
+
         Example:
-            >>> # Get all memory
-            >>> memory = agent.get_memory()
-            >>> 
-            >>> # Use with your own model
-            >>> your_model.chat(
-            ...     system="You are a sales assistant",
-            ...     context=memory,
-            ...     message="Who to follow up?"
-            ... )
+            >>> # Top-K retrieval for prompt context
+            >>> memory = agent.get_memory(query="What did Sarah say?")
+            >>>
+            >>> # Full project dump (auto-paginated)
+            >>> all_memory = agent.get_memory()
+            >>>
+            >>> # For very large projects, stream pages:
+            >>> for page in agent.iter_memory(page_size=500):
+            ...     process(page)
         """
         if query:
             response = self.client.post('/api/v1/memory/query/', {
                 'question': query,
-                'project_id': self.project_id
+                'project_id': self.project_id,
             })
             return response.get('graph_context', {})
-        else:
-            # Get all memory
-            response = self.client.post('/api/v1/memory/query/', {
-                'question': 'What do you know?',
-                'project_id': self.project_id
-            })
-            return response.get('graph_context', {})
+
+        # Full-graph mode: auto-paginate via /memory/list/.
+        entities: List[Dict[str, Any]] = []
+        relationships: List[Dict[str, Any]] = []
+        for page in self.iter_memory(page_size=page_size):
+            entities.extend(page.get('entities', []))
+            relationships.extend(page.get('relationships', []))
+            if len(entities) >= max_entities:
+                entities = entities[:max_entities]
+                break
+        return {'entities': entities, 'relationships': relationships}
+
+    def iter_memory(self, page_size: int = 500) -> Iterator[Dict[str, Any]]:
+        """
+        Stream the full project graph one page at a time.
+
+        Yields a dict ``{entities, relationships, next_cursor, has_more}`` per page.
+        Iteration stops automatically when the server reports no more pages.
+
+        Args:
+            page_size: Rows per page (1-1000, default 500).
+
+        Example:
+            >>> for page in agent.iter_memory(page_size=200):
+            ...     for entity in page["entities"]:
+            ...         print(entity["name"])
+        """
+        cursor: Optional[str] = None
+        while True:
+            payload: Dict[str, Any] = {
+                'project_id': self.project_id,
+                'limit': page_size,
+            }
+            if cursor:
+                payload['cursor'] = cursor
+            page = self.client.post('/api/v1/memory/list/', payload)
+            yield page
+            if not page.get('has_more'):
+                break
+            cursor = page.get('next_cursor')
+            if not cursor:
+                break
     
     def set_system_prompt(self, prompt: str) -> Dict[str, Any]:
         """
