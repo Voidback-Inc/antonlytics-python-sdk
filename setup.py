@@ -9,7 +9,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="antonlytics",
-    version="2.0.0",
+    version="2.1.0",
     author="Voidback",
     author_email="hello@voidback.com",
     description="Memory for AI Agents - Simple natural language SDK",
@@ -47,6 +47,10 @@ setup(
             "black>=23.0.0",
             "flake8>=6.0.0",
             "mypy>=1.0.0",
+        ],
+        "langchain": [
+            "langchain-core>=0.2.0",
+            "pydantic>=2.0.0",
         ],
     },
     keywords="ai agent memory llm knowledge-graph natural-language",
