@@ -9,7 +9,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="antonlytics",
-    version="2.2.0",
+    version="2.3.0",
     author="Voidback",
     author_email="hello@voidback.com",
     description="Memory for AI Agents - Simple natural language SDK",

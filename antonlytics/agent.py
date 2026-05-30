@@ -51,6 +51,70 @@ class Agent:
         self.base_url = base_url.rstrip('/')
         self.client = HTTPClient(api_key, base_url)
     
+    def ingest_triplets(self, triplets: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Ingest pre-formed triplets directly — bypasses Claude extraction.
+
+        Use this from SaaS applications when your code already knows the
+        structured data (rows from a DB, parsed events, etc.) and you don't
+        want to pay LLM extraction cost / latency.
+
+        Each triplet is:
+            {
+              "subject":   {"type": str, "id": str, "properties": dict},
+              "predicate": str,   # e.g. "PURCHASED"
+              "object":    {"type": str, "id": str, "properties": dict},
+              "relationship_properties": dict (optional)
+            }
+
+        Args:
+            triplets: list of triplet dicts.
+
+        Returns:
+            ``{"success": bool, "event_id": str, "async": bool, "results": {...}}``
+            Batches over 100 are processed asynchronously; poll
+            ``Agent.ingestion_event_status(event_id)``.
+        """
+        if not triplets:
+            raise AntonlyticsError("triplets must be a non-empty list")
+        return self.client.post('/api/v1/ingest/', {
+            'project_id': self.project_id,
+            'triplets': triplets,
+        })
+
+    def upsert_entity(
+        self,
+        type: str,
+        external_id: str,
+        properties: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Convenience: create or update a single entity (no relationship).
+
+        Internally posts a self-referential triplet which the engine treats as
+        an entity upsert — same code path as direct ingestion."""
+        return self.ingest_triplets([{
+            'subject':   {'type': type, 'id': external_id, 'properties': properties or {}},
+            'predicate': 'SELF',
+            'object':    {'type': type, 'id': external_id, 'properties': properties or {}},
+        }])
+
+    def add_relationship(
+        self,
+        source: Dict[str, Any],
+        predicate: str,
+        target: Dict[str, Any],
+        relationship_properties: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Convenience: post a single (source --[predicate]--> target) edge.
+
+        Both endpoints are upserted if they don't already exist."""
+        return self.ingest_triplets([{
+            'subject':                  source,
+            'predicate':                predicate,
+            'object':                   target,
+            'relationship_properties':  relationship_properties or {},
+        }])
+
     def ingest(self, text: str) -> Dict[str, Any]:
         """
         Ingest text and extract entities/relationships.

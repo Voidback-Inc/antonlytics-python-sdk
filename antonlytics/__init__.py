@@ -1,11 +1,22 @@
 """
-Antonlytics Python SDK - Memory for AI Agents
+Antonlytics Python SDK — Memory + Ontology infrastructure for AI agents
+and SaaS applications.
 
-Simple SDK for giving your AI agent persistent memory.
+Two entry points:
+
+  * ``Agent``        — project-scoped: ingest, chat, retrieval, system prompt.
+  * ``Antonlytics``  — account-level: project CRUD, plus ``.agent()`` factory.
 """
 
 from .agent import Agent
+from .client import Antonlytics
 from .exceptions import AntonlyticsError, APIError, AuthenticationError
 
-__version__ = "2.2.0"
-__all__ = ["Agent", "AntonlyticsError", "APIError", "AuthenticationError"]
+__version__ = "2.3.0"  # bumped: ingest_triplets + Antonlytics client
+__all__ = [
+    "Agent",
+    "Antonlytics",
+    "AntonlyticsError",
+    "APIError",
+    "AuthenticationError",
+]
